@@ -1,5 +1,5 @@
 ---
-title: Gradio Chatbot
+title: Ai Agents Lifecycle Monitor
 emoji: 💬
 colorFrom: yellow
 colorTo: purple
