@@ -1,2 +1,27 @@
 huggingface_hub==0.25.2
 gradio[mcp]
+# UI & app server
+gradio>=3.0
+uvicorn
+
+# Agent orchestration
+langchain           # You can pin to latest used lightweight version
+
+# MCP system
+mcp                         # FastMCP server, essential
+
+# Transformers + Embeddings
+transformers>=4.30
+sentence-transformers==2.2.2  # This is lightweight and stable
+
+# Vector DB (optional)
+chromadb
+
+# HTTP calls between components
+requests
+
+# Modal API
+modal
+modal-client
+langchain-huggingface
+langchain_community

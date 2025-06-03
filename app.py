@@ -1,4 +1,4 @@
-import gradio as gr
+'''import gradio as gr
 from huggingface_hub import InferenceClient
 
 """
@@ -61,4 +61,36 @@ demo = gr.ChatInterface(
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch()'''
+# File: app.py
+
+import threading
+from servers.test_runner_server import mcp as test_runner_mcp
+from servers.drift_monitor_server import mcp as drift_monitor_mcp
+from servers.version_control_server import mcp as version_control_mcp
+from servers.retraining import mcp as retraining_mcp
+from dashboard.gradio_dashboard import launch_dashboard
+
+
+def start_test_runner():
+    # FastMCP was instantiated with its port inside test_runner.py
+    test_runner_mcp.run()
+
+def start_drift_monitor():
+    drift_monitor_mcp.run()
+
+def start_version_control():
+    version_control_mcp.run()
+
+def start_retraining():
+    retraining_mcp.run()
+
+if __name__ == "__main__":
+    # Launch each micro-server in its own daemon thread
+    for fn in (start_test_runner, start_drift_monitor, start_version_control, start_retraining):
+        t = threading.Thread(target=fn, daemon=True)
+        t.start()
+
+    # Launch the Gradio dashboard (blocks on port 7860)
+    launch_dashboard()
+

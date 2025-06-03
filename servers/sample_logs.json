@@ -1,0 +1,12 @@
+[
+  {
+    "timestamp": "2025-05-28T12:00:00Z",
+    "input": "How do I pay my bill?",
+    "output": "You can pay via our portal at example.com."
+  },
+  {
+    "timestamp": "2025-05-29T15:30:00Z",
+    "input": "Billing complaint",
+    "output": "We apologize for the inconvenience."
+  }
+]
