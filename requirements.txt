@@ -12,7 +12,7 @@ mcp                         # FastMCP server, essential
 
 # Transformers + Embeddings
 transformers>=4.30
-sentence-transformers==2.2.2  # This is lightweight and stable
+# This is lightweight and stable
 
 # Vector DB (optional)
 chromadb

@@ -1,10 +1,14 @@
 # dashboard/gradio_dashboard.py
+import asyncio
+from contextlib import AsyncExitStack
 
 import gradio as gr
 from transformers import pipeline
 import requests
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import logging
+from mcp.client.stdio import stdio_client
+from mcp import ClientSession, StdioServerParameters
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -45,6 +49,34 @@ def summarize_text(text: str, context: str = "") -> str:
             return f"{context}: Error generating summary - {str(e)[:100]}..."
     else:
         return f"{context}: Mock summary for: {text[:100]}..."
+
+class MCPClient:
+    def __init__(self, name):
+        self.session: Optional[ClientSession] = None
+        self.exit_stack = AsyncExitStack()
+        self.name = name
+
+    async def connect(self, server_script_path: str):
+        """Connect to an MCP server using a script path."""
+        server_params = StdioServerParameters(
+            command="python",
+            args=[server_script_path],
+            env=None
+        )
+        stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
+        self.stdio, self.write = stdio_transport
+        self.session = await self.exit_stack.enter_async_context(ClientSession(self.stdio, self.write))
+        await self.session.initialize()
+        logger.info(f"Connected to {self.name} server")
+
+    async def list_tools(self):
+        response = await self.session.list_tools()
+        tools = response.tools
+        return tools
+
+    async def cleanup(self):
+        """Clean up resources"""
+        await self.exit_stack.aclose()
 
 
 # ────── 2. Tools for MCP Endpoints ──────
@@ -177,7 +209,20 @@ tests_tool = RunTestsTool()
 retrain_tool = TriggerRetrainTool()
 status_tool = CheckRetrainStatusTool()
 
+drift_client = MCPClient("DriftMonitor")
+versions_client = MCPClient("VersionsMonitor")
+tests_client = MCPClient("TestRunner")
+retrain_client = MCPClient("RetrainingServer")
 
+async def connect_all():
+    await asyncio.gather(
+        drift_client.connect("servers/drift_monitor_server.py"),
+        versions_client.connect("servers/version_server.py"),
+        tests_client.connect("servers/test_runner_server.py"),
+        retrain_client.connect("servers/retraining.py")
+    )
+
+asyncio.run(connect_all())
 # ────── 4. Gradio UI Functions ──────
 
 def refresh_status():
