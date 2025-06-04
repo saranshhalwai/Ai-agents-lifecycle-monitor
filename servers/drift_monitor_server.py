@@ -1,10 +1,18 @@
 # servers/drift_monitor.py
 
+import threading
+import time # Added for heartbeat
+import traceback # Added for better error logging
 from mcp.server.fastmcp import FastMCP
 import random
 import json
 from typing import List, Dict
 import os
+
+# Define HOST, PORT, and LOG_LEVEL constants
+HOST = "0.0.0.0"  # Assuming you want it to listen on all interfaces
+PORT = 7002       # Specific port for DriftMonitorServer
+LOG_LEVEL = "INFO" # Recommended log level
 
 # Attempt to import Modal stub; if missing, fall back to random drift
 try:
@@ -13,9 +21,9 @@ try:
 except ImportError:
     MODAL_AVAILABLE = False
 
-# Create the FastMCP instance and bind to port 6002
-mcp = FastMCP("DriftMonitorServer", port=6002)
-
+# Create the FastMCP instance and bind to port 7002
+# Pass all configuration (host, port, log_level) to the constructor
+mcp = FastMCP("DriftMonitorServer", host=HOST, port=PORT, log_level=LOG_LEVEL)
 
 @mcp.tool("fetch_recent")
 def fetch_recent(agent_name: str, since: str) -> List[Dict]:
@@ -92,6 +100,28 @@ def detect_drift(agent_name: str, time_window: str, drift_type: str) -> dict:
     }
 
 
+def _run_drift_monitor():
+    # Adding a heartbeat for consistency
+    def heartbeat():
+        while True:
+            print(">>> [drift_monitor] still running…")
+            time.sleep(5)
+
+    threading.Thread(target=heartbeat, daemon=True).start()
+
+    # Log what's being attempted before mcp.run()
+    print(f">>> [drift_monitor] Attempting to bind DriftMonitorServer on port {PORT} (host {HOST}) using Streamable HTTP…")
+    try:
+        # Call mcp.run() with the streamable-http transport
+        # Host, port, and log_level are already configured in the FastMCP instance
+        mcp.run(transport="streamable-http")
+        print(">>> [drift_monitor] INFO: DriftMonitorServer (Streamable HTTP) has started successfully.")
+    except Exception as e:
+        print(f"!!! [drift_monitor] ERROR: Failed to start DriftMonitorServer (Streamable HTTP): {e}")
+        traceback.print_exc() # Print full traceback for debugging
+    finally:
+        print(">>> [drift_monitor] DriftMonitorServer thread is terminating.")
+
+# (optional) keep the __main__ for standalone runs:
 if __name__ == "__main__":
-    # Run the MCP server on port 6002
-    mcp.run()
+    _run_drift_monitor()

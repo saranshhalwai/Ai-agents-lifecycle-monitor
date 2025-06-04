@@ -142,7 +142,7 @@ class DetectDriftTool:
 
     def run(self, tool_input: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            resp = requests.post("http://localhost:6002/detect_drift", json=tool_input, timeout=5)
+            resp = requests.post("http://localhost:7002/detect_drift", json=tool_input, timeout=5)
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
@@ -162,7 +162,7 @@ class ListVersionsTool:
 
     def run(self, tool_input: Dict[str, Any] = None) -> List[str]:
         try:
-            resp = requests.get("http://localhost:6003/list_versions", timeout=5)
+            resp = requests.get("http://localhost:7003/list_versions", timeout=5)
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
@@ -177,7 +177,7 @@ class CompareVersionsTool:
 
     def run(self, tool_input: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            resp = requests.post("http://localhost:6003/compare_versions", json=tool_input, timeout=5)
+            resp = requests.post("http://localhost:7003/compare_versions", json=tool_input, timeout=5)
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
@@ -200,11 +200,11 @@ class RunTestsTool:
 
     def run(self, tool_input: Dict[str, Any]) -> Dict[str, str]:
         try:
-            tests = requests.get("http://localhost:6001/list_tests", timeout=5).json()
+            tests = requests.get("http://localhost:7001/list_tests", timeout=5).json()
             results = {}
             for test_name in tests:
                 payload = {"test_name": test_name, "agent_version": tool_input["agent_version"]}
-                r = requests.post("http://localhost:6001/run_test", json=payload, timeout=10)
+                r = requests.post("http://localhost:7001/run_test", json=payload, timeout=10)
                 r.raise_for_status()
                 results[test_name] = r.json()["status"]
             return results
@@ -226,7 +226,7 @@ class TriggerRetrainTool:
 
     def run(self, tool_input: Dict[str, Any]) -> Dict[str, str]:
         try:
-            resp = requests.post("http://localhost:6004/trigger_retraining", json=tool_input, timeout=5)
+            resp = requests.post("http://localhost:7004/trigger_retraining", json=tool_input, timeout=5)
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
@@ -242,7 +242,7 @@ class CheckRetrainStatusTool:
 
     def run(self, tool_input: Dict[str, Any]) -> Dict[str, str]:
         try:
-            resp = requests.post("http://localhost:6004/check_retraining_status", json=tool_input, timeout=5)
+            resp = requests.post("http://localhost:7004/check_retraining_status", json=tool_input, timeout=5)
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
@@ -368,7 +368,7 @@ def check_retrain_status(job_id):
             new_v = status.get("new_version", f"v{job_id[-4:]}")
             # Automatically store new version
             try:
-                requests.post("http://localhost:6003/store_version", json={
+                requests.post("http://localhost:7003/store_version", json={
                     "new_version": new_v,
                     "base_version": job_id,
                     "model_uri": f"s3://bucket/{new_v}",

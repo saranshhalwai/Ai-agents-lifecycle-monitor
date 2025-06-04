@@ -62,7 +62,7 @@ demo = gr.ChatInterface(
 
 if __name__ == "__main__":
     demo.launch()'''
-# File: app.py
+'''# File: app.py
 
 import threading
 from servers.test_runner_server import mcp as test_runner_mcp
@@ -92,5 +92,42 @@ if __name__ == "__main__":
         t.start()
 
     # Launch the Gradio dashboard (blocks on port 7860)
+    launch_dashboard()'''
+# app.py
+
+import threading
+import time
+
+from servers.test_runner_server import _run_test_runner
+from servers.drift_monitor_server import _run_drift_monitor
+from servers.version_control_server import _run_version_control
+from servers.retraining import _run_retraining
+
+from dashboard.gradio_dashboard import launch_dashboard
+
+def start_test_runner():
+    print(">>> [app] start_test_runner() called")
+    _run_test_runner()  # print happens inside there, then binds
+
+def start_drift_monitor():
+    print(">>> [app] start_drift_monitor() called")
+    _run_drift_monitor()
+
+def start_version_control():
+    print(">>> [app] start_version_control() called")
+    _run_version_control()
+
+def start_retraining():
+    print(">>> [app] start_retraining() called")
+    _run_retraining()
+
+if __name__ == "__main__":
+    for fn in (start_test_runner, start_drift_monitor, start_version_control, start_retraining):
+        t = threading.Thread(target=fn, daemon=True)
+        t.start()
+
+    # give each thread a moment to bind its port
+    time.sleep(1)
+    print(">>> [app] All MCP servers (threads) have been started; launching dashboard …")
     launch_dashboard()
 

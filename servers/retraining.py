@@ -1,20 +1,19 @@
 # servers/retraining.py
 
-"""
-Retraining MCP Server
-
-This server exposes:
-  - Tool: trigger_retraining(base_version) → enqueues a Modal job for fine-tuning; returns a job_id.
-  - Tool: check_retraining_status(job_id) → polls Modal to see if the retraining job is complete; returns status + new_version if done.
-
-Uses Modal’s Function.lookup to call deployed functions, so no direct import of modal_setup.
-"""
-
+import threading
+import time  # Added for heartbeat
+import traceback  # Added for better error logging
 from mcp.server.fastmcp import FastMCP
 from modal import Function
 
-# Create the FastMCP instance and bind to port 6004
-mcp = FastMCP("RetrainingServer", port=6004)
+# Define HOST, PORT, and LOG_LEVEL constants
+HOST = "0.0.0.0"  # Assuming you want it to listen on all interfaces
+PORT = 7004       # Specific port for RetrainingServer
+LOG_LEVEL = "INFO" # Recommended log level
+
+# Create the FastMCP instance and bind to port 7004
+# Pass all configuration (host, port, log_level) to the constructor
+mcp = FastMCP("RetrainingServer", host=HOST, port=PORT, log_level=LOG_LEVEL)
 
 
 @mcp.tool("trigger_retraining")
@@ -59,6 +58,28 @@ def check_retraining_status(job_id: str) -> dict:
         return {"status": job.state, "new_version": None}
 
 
+def _run_retraining():
+    # Adding a heartbeat for consistency
+    def heartbeat():
+        while True:
+            print(">>> [retraining] still running…")
+            time.sleep(5)
+
+    threading.Thread(target=heartbeat, daemon=True).start()
+
+    # Log what's being attempted before mcp.run()
+    print(f">>> [retraining] Attempting to bind RetrainingServer on port {PORT} (host {HOST}) using Streamable HTTP…")
+    try:
+        # Call mcp.run() with the streamable-http transport
+        # Host, port, and log_level are already configured in the FastMCP instance
+        mcp.run(transport="streamable-http")
+        print(">>> [retraining] INFO: RetrainingServer (Streamable HTTP) has started successfully.")
+    except Exception as e:
+        print(f"!!! [retraining] ERROR: Failed to start RetrainingServer (Streamable HTTP): {e}")
+        traceback.print_exc()  # Print full traceback for debugging
+    finally:
+        print(">>> [retraining] RetrainingServer thread is terminating.")
+
+# (optional) keep the __main__ for standalone runs:
 if __name__ == "__main__":
-    # Run the MCP server on port 6004
-    mcp.run()
+    _run_retraining()
