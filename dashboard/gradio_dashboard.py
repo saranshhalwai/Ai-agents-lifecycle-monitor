@@ -1,5 +1,6 @@
 # dashboard/gradio_dashboard.py
 import asyncio
+import signal
 from contextlib import AsyncExitStack
 
 import gradio as gr
@@ -50,6 +51,7 @@ def summarize_text(text: str, context: str = "") -> str:
     else:
         return f"{context}: Mock summary for: {text[:100]}..."
 
+
 class MCPClient:
     def __init__(self, name):
         self.session: Optional[ClientSession] = None
@@ -77,6 +79,58 @@ class MCPClient:
     async def cleanup(self):
         """Clean up resources"""
         await self.exit_stack.aclose()
+
+
+# Global clients and shutdown event
+drift_client = MCPClient("DriftMonitor")
+versions_client = MCPClient("VersionsMonitor")
+tests_client = MCPClient("TestRunner")
+retrain_client = MCPClient("RetrainingServer")
+
+shutdown_event = asyncio.Event()
+
+
+async def connect_all():
+    """Background task to maintain MCP connections"""
+    try:
+        await asyncio.gather(
+            drift_client.connect("servers/drift_monitor_server.py"),
+            versions_client.connect("servers/version_control_server.py"),
+            tests_client.connect("servers/test_runner_server.py"),
+            retrain_client.connect("servers/retraining.py")
+        )
+        logger.info("All MCP clients connected successfully!")
+
+        # Keep connections alive until shutdown
+        await shutdown_event.wait()
+
+    except Exception as e:
+        logger.error(f"Error in MCP connections: {e}")
+        raise
+    finally:
+        logger.info("Cleaning up MCP connections...")
+        await disconnect_all()
+
+
+async def disconnect_all():
+    """Clean up all MCP client connections"""
+    try:
+        await asyncio.gather(
+            drift_client.cleanup(),
+            versions_client.cleanup(),
+            tests_client.cleanup(),
+            retrain_client.cleanup(),
+            return_exceptions=True
+        )
+        logger.info("All MCP clients disconnected")
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+
+
+def signal_handler():
+    """Handle shutdown signals gracefully"""
+    logger.info("Received shutdown signal...")
+    shutdown_event.set()
 
 
 # ────── 2. Tools for MCP Endpoints ──────
@@ -209,20 +263,7 @@ tests_tool = RunTestsTool()
 retrain_tool = TriggerRetrainTool()
 status_tool = CheckRetrainStatusTool()
 
-drift_client = MCPClient("DriftMonitor")
-versions_client = MCPClient("VersionsMonitor")
-tests_client = MCPClient("TestRunner")
-retrain_client = MCPClient("RetrainingServer")
 
-async def connect_all():
-    await asyncio.gather(
-        drift_client.connect("servers/drift_monitor_server.py"),
-        versions_client.connect("servers/version_server.py"),
-        tests_client.connect("servers/test_runner_server.py"),
-        retrain_client.connect("servers/retraining.py")
-    )
-
-asyncio.run(connect_all())
 # ────── 4. Gradio UI Functions ──────
 
 def refresh_status():
@@ -521,17 +562,65 @@ def create_dashboard():
     return demo
 
 
-def launch_dashboard():
+async def main():
+    """Main async function to coordinate MCP connections and Gradio dashboard"""
+    # Set up graceful shutdown
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, signal_handler)
+        except NotImplementedError:
+            # Windows doesn't support add_signal_handler
+            pass
+
+    # Start MCP connection manager as background task
+    logger.info("Starting MCP connections...")
+    connection_task = asyncio.create_task(connect_all())
+
+    # Give connections time to establish
+    await asyncio.sleep(2)
+
     try:
+        # Create and launch Gradio dashboard
         demo = create_dashboard()
-        logger.info("Starting dashboard server...")
+        logger.info("Starting Gradio dashboard server...")
+
+        # Launch in a way that doesn't block the event loop
         demo.launch(
             server_name="0.0.0.0",
             server_port=7860,
             share=False,
             show_error=True,
-            quiet=False
+            quiet=False,
+            prevent_thread_lock=True  # This allows the event loop to continue
         )
+
+        # Keep the main function running
+        while not shutdown_event.is_set():
+            await asyncio.sleep(1)
+
+    except KeyboardInterrupt:
+        logger.info("Received keyboard interrupt...")
+        shutdown_event.set()
+    except Exception as e:
+        logger.error(f"Error in main: {e}")
+        shutdown_event.set()
+    finally:
+        # Wait for connection cleanup
+        logger.info("Waiting for MCP connections to cleanup...")
+        try:
+            await asyncio.wait_for(connection_task, timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning("MCP cleanup timed out")
+
+        logger.info("Application shutdown complete")
+
+
+def launch_dashboard():
+    """Entry point that handles both sync and async execution"""
+    try:
+        # Run the async main function
+        asyncio.run(main(), debug=True)
     except Exception as e:
         logger.error(f"Error launching dashboard: {e}")
         print(f"Failed to launch dashboard: {e}")
